@@ -1,4 +1,3 @@
 function sayHi() {
-  alert("LET'S GET IT! No pain, No gain 💪");
+  alert("Let's get to work! 💪 No excuses today!");
 }
-console.log("FITGUIDE loaded");
