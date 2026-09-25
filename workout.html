@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FITGUIDE — Workout Timer</title>
+</head>
+<body>
+
+<a class="backlink" href="index.html">← back</a>
+<h1>ROUNDS</h1>
+<div class="tag">work. rest. repeat.</div>
+
+<div class="setup-screen" id="setupScreen">
+  <div class="card">
+    <div class="row">
+      <div>
+        <label>Work</label>
+        <span class="sub">seconds per round</span>
+      </div>
+      <div class="stepper">
+        <button onclick="adjust('work',-5)">−</button>
+        <span id="workVal">30</span>
+        <button onclick="adjust('work',5)">+</button>
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Rest</label>
+        <span class="sub">seconds between rounds</span>
+      </div>
+      <div class="stepper">
+        <button onclick="adjust('rest',-5)">−</button>
+        <span id="restVal">15</span>
+        <button onclick="adjust('rest',5)">+</button>
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Rounds</label>
+        <span class="sub">total number</span>
+      </div>
+      <div class="stepper">
+        <button onclick="adjust('rounds',-1)">−</button>
+        <span id="roundsVal">8</span>
+        <button onclick="adjust('rounds',1)">+</button>
+      </div>
+    </div>
+  </div>
+  <button class="primary" onclick="startWorkout()">START WORKOUT</button>
+</div>
+
+<div class="timer-screen" id="timerScreen">
+  <div class="phase-label" id="phaseLabel">GET READY</div>
+  <div class="clock" id="clock">10</div>
+  <div class="round-info">Round <b id="roundNow">1</b> of <b id="roundTotal">8</b></div>
+  <div class="bar-track"><div class="bar-fill" id="barFill"></div></div>
+  <div class="controls">
+    <button onclick="togglePause()" id="pauseBtn">PAUSE</button>
+    <button class="stop" onclick="stopWorkout()">END</button>
+  </div>
+</div>
+
+<div class="done-screen" id="doneScreen">
+  <div class="big">DONE</div>
+  <div class="tag" id="doneSummary">8 rounds crushed.</div>
+  <button class="primary" style="margin-top:24px;max-width:280px;" onclick="resetAll()">BACK TO SETUP</button>
+</div>
+
+<footer>No data leaves this page. Nothing is saved.</footer>
+
+<script>
+let settings = { work: 30, rest: 15, rounds: 8 };
+let state = { phase:'ready', round:1, remaining:0, paused:false, timerId:null };
+let audioCtx;
+
+function adjust(key, delta){
+  let min = key === 'rounds' ? 1 : 5;
+  settings[key] = Math.max(min, settings[key] + delta);
+  document.getElementById(key+'Val').textContent = settings[key];
+}
+
+function beep(freq, dur){
+  try{
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.frequency.value = freq;
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+    osc.stop(audioCtx.currentTime + dur);
+  }catch(e){}
+}
+
+function startWorkout(){
+  document.getElementById('setupScreen').classList.add('hidden');
+  document.getElementById('timerScreen').classList.add('active');
+  document.getElementById('roundTotal').textContent = settings.rounds;
+  state = { phase:'ready', round:1, remaining:3, paused:false, timerId:null };
+  runReady();
+}
+
+function runReady(){
+  setPhase('GET READY','go');
+  tick();
+}
+
+function setPhase(label, cls){
+  const el = document.getElementById('phaseLabel');
+  el.textContent = label;
+  el.className = 'phase-label ' + cls;
+  document.getElementById('barFill').style.background =
+    cls === 'work' ? 'var(--work)' : cls === 'rest' ? 'var(--rest)' : 'var(--go)';
+}
+
+function tick(){
+  clearInterval(state.timerId);
+  updateClock();
+  state.timerId = setInterval(()=>{
+    if(state.paused) return;
+    state.remaining--;
+    updateClock();
+    if(state.remaining <= 3 && state.remaining > 0) beep(880,0.1);
+    if(state.remaining <= 0){
+      advancePhase();
+    }
+  },1000);
+}
+
+function updateClock(){
+  document.getElementById('clock').textContent = state.remaining;
+  document.getElementById('roundNow').textContent = state.round;
+  const total = state.phase==='work'? settings.work : state.phase==='rest'? settings.rest : 3;
+  document.getElementById('barFill').style.width = Math.max(0,(state.remaining/total*100)) + '%';
+}
+
+function advancePhase(){
+  if(state.phase === 'ready'){
+    state.phase = 'work';
+    state.remaining = settings.work;
+    setPhase('WORK','work');
+    beep(660,0.2);
+  } else if(state.phase === 'work'){
+    if(state.round >= settings.rounds){
+      finishWorkout();
+      return;
+    }
+    state.phase = 'rest';
+    state.remaining = settings.rest;
+    setPhase('REST','rest');
+    beep(440,0.2);
+  } else if(state.phase === 'rest'){
+    state.round++;
+    state.phase = 'work';
+    state.remaining = settings.work;
+    setPhase('WORK','work');
+    beep(660,0.2);
+  }
+  updateClock();
+}
+
+function togglePause(){
+  state.paused = !state.paused;
+  document.getElementById('pauseBtn').textContent = state.paused ? 'RESUME' : 'PAUSE';
+}
+
+function stopWorkout(){
+  clearInterval(state.timerId);
+  resetAll();
+}
+
+function finishWorkout(){
+  clearInterval(state.timerId);
+  beep(990,0.3);
+  document.getElementById('timerScreen').classList.remove('active');
+  document.getElementById('doneScreen').classList.add('active');
+  document.getElementById('doneSummary').textContent = settings.rounds + ' rounds crushed.';
+}
+
+function resetAll(){
+  clearInterval(state.timerId);
+  document.getElementById('timerScreen').classList.remove('active');
+  document.getElementById('doneScreen').classList.remove('active');
+  document.getElementById('setupScreen').classList.remove('hidden');
+  document.getElementById('pauseBtn').textContent = 'PAUSE';
+}
+</script>
+</body>
+</html>
